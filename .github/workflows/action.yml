@@ -18,6 +18,7 @@ jobs:
             ubuntu-latest-clang-cmake,
             macos-latest-clang-autotools,
             macos-latest-clang-cmake,
+            windows-latest-cmake,
             ubuntu-latest-gcc-autotools-64-bit-words,
             ubuntu-latest-clang-autotools-64-bit-words,
             ubuntu-latest-gcc-cmake-64-bit-words,
@@ -67,6 +68,11 @@ jobs:
             cxx: clang++
             build-system: cmake
             configure-opts: ''
+
+          - name: windows-latest-cmake
+            os: windows-latest
+            build-system: cmake
+            configure-opts: '-DWITH_OGG=OFF'
 
           - name: ubuntu-latest-gcc-autotools-64-bit-words
             os: ubuntu-latest
@@ -121,7 +127,7 @@ jobs:
           brew update
           brew install automake pkg-config libogg
 
-      - name: Install Lunux dependencies
+      - name: Install Linux dependencies
         if: startsWith(matrix.os,'ubuntu')
         run: |
           sudo apt-get update
@@ -138,14 +144,40 @@ jobs:
           make
           make check
 
-      - name: Build with CMake
+      - name: Prepare CMake build directory
         if: startsWith(matrix.build-system,'cmake')
         env:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
-        run: |
-          mkdir cmake-build
-          cd cmake-build
-          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON ${{ matrix.configure-opts }} -DCMAKE_FIND_FRAMEWORK=NEVER
-          cmake --build .
-          ctest -V
+        run: mkdir cmake-build
+
+      - name: CMake generator
+        if: startsWith(matrix.build-system,'cmake')
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        working-directory: cmake-build
+        run: cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON ${{ matrix.configure-opts }} -DCMAKE_FIND_FRAMEWORK=NEVER
+
+      - name: CMake build
+        if: startsWith(matrix.build-system,'cmake')
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        working-directory: cmake-build
+        run: cmake --build .
+
+      - name: CMake test
+        if: startsWith(matrix.build-system,'cmake')
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        working-directory: cmake-build
+        run: ctest -V -C Debug
+
+      - name: Upload logs on failure
+        uses: actions/upload-artifact@v2
+        if: failure()
+        with:
+          name: flac-${{ github.sha }}-${{ github.run_id }}-logs
+          path: ./**/*.log
